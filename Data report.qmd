@@ -1,0 +1,171 @@
+---
+title: "UNICEF Data Report"
+format: html
+editor: visual
+---
+
+# **UNICEF Indicators Analysis**
+
+This report provides an in-depth analysis of UNICEF indicators data, focusing on children's health and deprivation across various countries and time periods. The analysis is supported by visualizations created with `ggplot2`.
+
+## **Data Preparation**
+
+We begin by loading the data from the provided CSV files.
+
+```{r}
+library(tidyverse)   # For filtering, data manipulations
+library(ggplot2)     # For visualizations
+library(maps)        # For World chart
+library(ggmap)
+
+# Indicator 1 data
+indicator1 <- read.csv("unicef_indicator_1.csv")
+
+# Meta data
+metadata <- read.csv("unicef_metadata.csv")
+```
+
+We aim to use both the indicator data and meta data provided by UNICEF to extract insights. So, the next step is to merge the indicator data with the metadata. The resulting dataset contains a total of 13,419 observations with 21 features/variables.
+
+```{r}
+# Merge indicator with metadata
+data <- merge(indicator1, metadata, by = c("country", "alpha_2_code", "alpha_3_code", "numeric_code"))
+str(data)
+```
+
+## **World Map Chart**
+
+The first visualization is a world map showing the percentage of children suffering from at least three deprivations.
+
+```{r}
+
+# Summarize data for world map
+world <- map_data("world")
+indicator_avg <- data %>%
+  group_by(country) %>%
+  summarize(avg_value = mean(obs_value, na.rm = TRUE))
+
+# CReate the world Map
+world_data <- left_join(world, indicator_avg, by = c("region" = "country"))
+ggplot(world_data, aes(long, lat, group = group, fill = avg_value)) +
+  geom_polygon(color = "white") +
+  scale_fill_viridis_c() +
+  theme_minimal() +
+  labs(title = "World Map of Average Indicator Values",
+       fill = "Average Value")
+
+```
+
+We can say that a high `obs_value` means a higher percentage of children in that country are suffering from atleast three severe deprivations.
+
+-   From the World map, we can see that Madagascar has the highest `obs_value` among all other regions.
+
+-   Countries like Mexico, Thailand, Mongolia, USA, Egypt and Algeria have the lowest `obs_value`.
+
+We can look at the overall GDP of these countries to understand if the `obs_value` has any correlation with GDP.
+
+## **Bar Chart of Mean GDP per Capita**
+
+The bar chart displays the mean GDP per capita by country for the top 20 countries.
+
+```{r}
+# Calculate mean GDP per capita for each country
+gdp_data <- metadata %>%
+  group_by(country) %>%
+  summarize(mean_gdp_per_capita = mean(`GDP.per.capita..constant.2015.US..`, na.rm = TRUE)) %>%
+  arrange(desc(mean_gdp_per_capita)) %>%
+  top_n(20, mean_gdp_per_capita)
+
+# Create the bar chart
+ggplot(gdp_data, aes(x = reorder(country, mean_gdp_per_capita), y = mean_gdp_per_capita)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  coord_flip() +
+  labs(title = "Top 20 Countries by Mean GDP per Capita",
+       x = "Country", y = "Mean GDP per Capita (constant 2015 US$)") +
+  theme_minimal()
+
+
+```
+
+Based on the bar plot, topmost countries having the highest GDP per capita include Monaco, Bermuda, Switzerland, Liechtenstein, USA, Norway, and UAE.
+
+```{r}
+# Calculate mean GDP per capita for each country
+gdp_data <- metadata %>%
+  group_by(country) %>%
+  summarize(mean_gdp_per_capita = mean(`GDP.per.capita..constant.2015.US..`, na.rm = TRUE)) %>%
+  arrange(mean_gdp_per_capita) %>%
+  slice_head(n = 20)
+
+# Create the bar chart
+ggplot(gdp_data, aes(x = reorder(country, mean_gdp_per_capita), y = mean_gdp_per_capita)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  coord_flip() +
+  labs(title = "Bottom 20 Countries by Mean GDP per Capita",
+       x = "Country", y = "Mean GDP per Capita (constant 2015 US$)") +
+  theme_minimal()
+
+```
+
+The countries having the lowest GDP per capital include Ethiopia, Burundi, Afghanistan, Somalia, and Chad.
+
+Based on the this, we can hypothesize that countries having the lowest GDP per capita might have the highest `obs_value` for the indicator.
+
+Let's test this theory in the next section.
+
+## **Scatterplot with Linear Regression Line**
+
+This scatterplot shows the relationship between GDP per capita and the percentage of children suffering from at least three deprivations.
+
+```{r}
+
+# Develop the data for scatter plot
+scatter_data <- data %>%
+  group_by(country) %>%
+  summarize(avg_value = mean(obs_value, na.rm = TRUE), 
+            GDP_per_capita = mean(`GDP.per.capita..constant.2015.US..`, na.rm = TRUE))
+
+# Build the scatterplot
+ggplot(scatter_data, aes(x = GDP_per_capita, y = avg_value)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "blue") +
+  theme_minimal() +
+  labs(title = "Scatterplot of GDP per Capita vs. Average Indicator Value",
+       x = "GDP per Capita",
+       y = "Average Indicator Value")
+
+```
+
+Based on the scatterplot, we can clearly see a negative trend between GDP per Capita and Average `obs_value`. This means that as GDP per capita increases, the average observation value decreases, and vice versa.
+
+-   Negative trend implies that countries with higher GDP per capita tend to have better conditions for children, with fewer children suffering from severe deprivations.
+
+-   This also highlights the significant role of economic development in improving child welfare. Higher GDP per capita often translates to better healthcare, education, and social services, reducing the number of children experiencing severe hardships.
+
+Finally, let's see a time line of how GDP per capita changed over the years.
+
+## **Time-Series Chart**
+
+The time-series chart shows the trend of the GDP per capita over time.
+
+```{r}
+# Group by year and calculate mean GDP per capita
+time_series_data <- metadata %>%
+  group_by(year) %>%
+  summarize(mean_gdp_per_capita = mean(`GDP.per.capita..constant.2015.US..`, na.rm = TRUE))
+
+# Create the time series chart
+ggplot(time_series_data, aes(x = year, y = mean_gdp_per_capita)) +
+  geom_line(color = "blue") +
+  labs(title = "Trend of GDP per Capita Over Time",
+       x = "Year", y = "Mean GDP per Capita (constant 2015 US$)") +
+  theme_minimal()
+
+
+```
+
+Based on the time-series chart, GDP per capita has been clearly increasing over time as there is a positive trend. This indicates that, on average, countries have been experiencing economic growth, with the GDP per capita increasing steadily.
+
+# **Conclusion**
+
+This report provided an analysis of UNICEF indicators focusing on children's health and deprivation. The visualizations illustrated key insights, such as the geographical distribution, the relationship with economic indicators, and temporal trends.
